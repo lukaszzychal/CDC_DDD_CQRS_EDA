@@ -1,82 +1,86 @@
+🌐 **Language / Język:** 🇬🇧 **English** | 🇵🇱 [Polski](README.pl.md)
+
+---
+
 # 📦 Level 1: Inventory Tracker — CQRS, DDD, CDC & EDA
 
-Projekt demonstracyjny przedstawiający nowoczesną, zaawansowaną architekturę aplikacji internetowej opartej o **CQRS**, **Taktyczne DDD (Domain-Driven Design)**, **CDC (Change Data Capture)** oraz **Event-Driven Architecture (EDA)** z pełną obsługą spójności ostatecznej (**Eventual Consistency**).
+A reference showcase project demonstrating a modern, advanced web application architecture built on **CQRS**, **Tactical Domain-Driven Design (DDD)**, **Change Data Capture (CDC)**, and **Event-Driven Architecture (EDA)** with full support for **Eventual Consistency**.
 
 ---
 
-## 🏛️ Wzorce Architektoniczne i Projektowe
+## 🏛️ Architectural & Design Patterns
 
 ### 1. CQRS (Command Query Responsibility Segregation)
-Ścisłe rozdzielenie ścieżki zapisu od ścieżki odczytu w celu optymalizacji wydajności i skalowalności:
-* **Write Model (Ścieżka Zapisu):** Relacyjna baza danych **PostgreSQL 16**. Zapis realizowany jest wyłącznie przez Komendy (Commands) i Agregaty domenowe dbające o spójność danych.
-* **Read Models (Ścieżka Odczytu):** Modele zoptymalizowane pod konkretny przypadek użycia:
-  * **Meilisearch:** Pełnotekstowa wyszukiwarka (Full-Text Search) błyskawicznie zwracająca zapytania wyszukiwania produktów.
-  * **MongoDB 7.0:** Zdekompresowany sklep dokumentowy (NoSQL Document Store) zaimplementowany przy użyciu Doctrine MongoDB ODM.
+Strict separation between write path and read path for performance and scalability optimization:
+* **Write Model:** Relational database **PostgreSQL 16**. Writes are processed exclusively via Commands and Domain Aggregates enforcing data invariants.
+* **Read Models:** Purpose-built models optimized for specific read use cases:
+  * **Meilisearch:** Full-Text Search Engine delivering sub-millisecond product query responses.
+  * **MongoDB 7.0:** De-normalized Document Store (NoSQL) implemented using Doctrine MongoDB ODM.
 
-### 2. Taktyczne DDD (Domain-Driven Design)
-* **Aggregate Root (Korzeń Agregatu) (`Product`, `Category`):** Pilnuje niezmienników biznesowych i spójności danych w domenie.
-* **Value Objects (Obiekty Wartości) (`ProductId`, `ProductSku`, `Price`, `StockQuantity`):** Niemodyfikowalne obiekty z wbudowaną walidacją (np. cena nie może być ujemna, zapas nie może spadać poniżej zera).
-* **Domain Events (Zdarzenia Domenowe) (`ProductCreated`, `ProductWasPriced`, `CategoryCreated`):** Odzwierciedlają fakt biznesowy, który bezpowrotnie zaszedł w domenie.
-* **Domain Repositories (Interfejsy Repozytoriów):** Zdefiniowane jako abstrakcje w warstwie domeny, zaimplementowane w warstwie infrastruktury.
+### 2. Tactical DDD (Domain-Driven Design)
+* **Aggregate Root (`Product`, `Category`):** Guards business invariants and enforces consistency boundaries.
+* **Value Objects (`ProductId`, `ProductSku`, `Price`, `StockQuantity`):** Immutable value objects with self-contained validation logic.
+* **Domain Events (`ProductCreated`, `ProductWasPriced`, `CategoryCreated`):** Express domain facts that have occurred within the system.
+* **Domain Repositories:** Defined as interfaces in the domain layer and implemented in the infrastructure layer.
 
 ### 3. CDC (Change Data Capture)
-* Bezpośredni, nieinwazyjny odczyt zmian z dziennika bazy danych (**PostgreSQL WAL - Write-Ahead Log**) za pomocą **Debezium Connect**.
-* Zmiany są automatycznie przechwytywane na poziomie rejestru bazy i wysyłane do **Apache Kafka** bez obciążania aplikacji synchronicznym zapisem czy dodawaniem dodatkowych wywołań w kodzie aplikacji.
+* Non-invasive DB mutation capturing directly from the **PostgreSQL Write-Ahead Log (WAL)** using **Debezium Connect**.
+* Changes are automatically published to **Apache Kafka** without placing synchronous write overhead on application processes.
 
 ### 4. Event-Driven Architecture (EDA) & Eventual Consistency
-* Asynchroniczne zasilanie modeli odczytu (MongoDB & Meilisearch) poprzez komunikaty w Kafce przetwarzone przez **Symfony Messenger**.
-* Modele odczytu osiągają **spójność ostateczną (Eventual Consistency)** po przetworzeniu zdarzeń, gwarantując niezrównaną szybkość odpowiedzi po stronie zapisu HTTP.
+* Asynchronous read model ingestion (MongoDB & Meilisearch) via Kafka messages processed by **Symfony Messenger**.
+* Read models achieve **Eventual Consistency** post-event processing, providing high HTTP write response speeds.
 
 ---
 
-## 🛡️ Wzorce Obsługi Błędów i Wyjątków
+## 🛡️ Exception Handling & Fault Tolerance Patterns
 
-### 1. Domain Exception Pattern (Dedykowane Wyjątki Domenowe)
-Zamiast generycznych błędów runtime stosowane są jawne i semantyczne wyjątki biznesowe, np. `InvalidPriceException`, `InvalidStockQuantityException`, `ProductNotFoundException`.
+### 1. Domain Exception Pattern
+Custom semantic business exceptions (`InvalidPriceException`, `InvalidStockQuantityException`, `ProductNotFoundException`) instead of generic runtime errors.
 
-### 2. Exception Listener / Interceptor (Centralne Przechwytywanie Błędów)
-Wzorzec przechwytywania wyjątków na poziomie warstwy HTTP (Symfony Kernel Listener), zamieniający wyjątki domenowe na spójne i standaryzowane odpowiedzi JSON zgodne ze standardem **RFC 7807 (Problem Details for HTTP APIs)**.
+### 2. Exception Interceptor (Centralized HTTP Exception Listener)
+HTTP layer exception listener converting domain exceptions into standardized JSON responses complying with **RFC 7807 (Problem Details for HTTP APIs)**.
 
-### 3. Fail-Fast (Szybkie Przerwanie przy Błędzie)
-Wczesna walidacja danych wewnątrz Konstruktorów Obiektów Wartości (Value Objects) oraz Kontrolerach/DTO przed wykonaniem logiki biznesowej czy zapisem do bazy danych.
+### 3. Fail-Fast Pattern
+Early validation inside Value Object constructors and DTOs before hitting business logic or DB transactions.
 
 ### 4. Dead Letter Queue (DLQ) & Retry Strategy
-Mechanizm obsługi uszkodzonych lub niezrealizowanych komunikatów w kolejce (**Symfony Messenger / Kafka**). Komunikaty kończące się błędami są poddawane ponownym próbom (Retry), a po przekroczeniu limitu trafiają do dedykowanego transportu awaryjnego `failed` (Dead Letter Queue).
+Failing message isolation mechanism in **Symfony Messenger / Kafka**. Failed messages undergo configured retries before being routed to a dedicated `failed` Dead Letter Queue.
 
 ---
 
-## 💻 Stack Technologiczny
+## 💻 Tech Stack Overview
 
-| Kategoria | Technologia / Narzędzie | opis |
+| Category | Technology / Tool | Description |
 |---|---|---|
-| **Język & Framework** | **PHP 8.4**, **Symfony 7** | Component Messenger, Routing, Dependency Injection, Serializer |
-| **Write Model (PostgreSQL)** | **PostgreSQL 16** | Relacyjna baza danych z włączonym `wal_level=logical` |
-| **CDC Processing** | **Debezium Connect** | Przechwytywanie zmian z WAL bazy PostgreSQL |
-| **Message Broker** | **Apache Kafka** | Kolejkowanie i strumieniowanie komunikatów CDC i zdarzeń |
-| **Read Model #1 (FTS)** | **Meilisearch** | Błyskawiczny silnik wyszukiwania pełnotekstowego |
-| **Read Model #2 (NoSQL)** | **MongoDB 7.0** | Sklep dokumentowy + `doctrine/mongodb-odm-bundle` |
-| **Konteneryzacja & Ops** | **Docker & Docker Compose** | Środowisko uruchomieniowe ze skonfigurowaną siecią i kontenerami |
+| **Language & Framework** | **PHP 8.4**, **Symfony 7** | Messenger Component, Routing, DI Container, Serializer |
+| **Write Model** | **PostgreSQL 16** | Relational database with `wal_level=logical` enabled |
+| **CDC Engine** | **Debezium Connect** | Streaming WAL log changes from PostgreSQL |
+| **Message Broker** | **Apache Kafka** | Event streaming broker for CDC & domain messages |
+| **Read Model #1 (FTS)** | **Meilisearch** | High-performance search engine |
+| **Read Model #2 (NoSQL)** | **MongoDB 7.0** | Document store + `doctrine/mongodb-odm-bundle` |
+| **Ops & Containers** | **Docker & Docker Compose** | Isolated container environment and network topology |
 
 ---
 
-## ⚖️ Refleksja Architektoniczna: CDC vs. Zdarzenia Domenowe
+## ⚖️ Engineering Trade-Off: CDC vs. Domain Events
 
-> 💡 **Wniosek Inżynierski & Architektoniczny:**
+> 💡 **Architectural Trade-Off & Conclusion:**
 > 
-> W kontekście prostego projektu lub systemu zielonego pola (Greenfield), użycie **CDC (Change Data Capture)** z Debezium i Kafką do aktualizacji Read Modeli w tej samej aplikacji bywa **przerostem formy nad treścią (overkill)**. 
+> In greenfield applications or simple CRUD systems, using **CDC (Change Data Capture)** with Debezium and Kafka to update Read Models inside the same domain can be an **overkill**. 
 > 
-> **Dlaczego?**
-> * **Boilerplate i zawiłość parsowania:** Zdarzenia CDC operują na surowym stanie tabel bazy danych (`before`, `after`, `op`). Zamiast czytelnego obiektu domenowego `ProductWasPriced`, trzeba pisać parser i obsługiwać strukturę payloadu Debezium.
-> * **Czysty Kod i Zdarzenia Domenowe:** Jeśli masz pełną kontrolę nad kodem aplikacji, znacznie czystszym i prostszym podejściem jest publikowanie **Zdarzeń Domenowych (Domain Events)** bezpośrednio z Agregatów DDD lub szyny aplikacji.
+> **Why?**
+> * **Boilerplate & Parsing Complexity:** CDC events deal with raw table row states (`before`, `after`, `op`). Instead of clean domain objects like `ProductWasPriced`, developers must write raw payload parsers.
+> * **Clean Code & Domain Events:** When you own the codebase, publishing native **Domain Events** directly from Aggregates is significantly cleaner and more maintainable.
 >
-> **Kiedy CDC bije konkurencję na głowę?**
-> * **Integracja z Legacy Code:** CDC to absolutnie potężne narzędzie, gdy musisz połączyć istniejący, stary system (*Legacy System* - np. monolith bez zdarzeń domenowych, do którego nie chcesz lub nie możesz dopisywać nowego kodu) z nową architekturą mikrousług opartą o EDA.
-> * **Zero-Invasive Integration:** Przechwytujesz zmiany bezpośrednio z bazy danych bez dotykania ani jednej linijki legacy kodu!
+> **When does CDC shine?**
+> * **Legacy System Integration:** CDC is an irreplaceable tool when integrating legacy monoliths (where changing core code is risky/impossible) with new EDA microservices.
+> * **Zero-Invasive Integration:** You capture DB changes with **zero code modifications** in the legacy application!
 
 ---
 
-## 🚀 Szybkie Uruchomienie i Testowanie
+## 🚀 Quick Start & Manual Testing
 
-Szczegółową instrukcję krok po kroku dotyczącą uruchamiania kontenerów Docker, weryfikacji konektorów Debezium oraz gotowych poleceń `curl` / HTTP znajdziesz w pliku:
+For step-by-step instructions on Docker setup, Debezium connector verification, and cURL requests, see:
 
-👉 **[QUICKSTART.md](file:///Users/lukaszzychal/PhpstormProjects/CDC_DDD_CQRS_EDA/lvl1_Inventory%20Tracker_CRUD%20+%20CDC/QUICKSTART.md)**
+👉 **[QUICKSTART.md](QUICKSTART.md)**

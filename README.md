@@ -1,63 +1,67 @@
+🌐 **Language / Język:** 🇬🇧 **English** | 🇵🇱 [Polski](README.pl.md)
+
+---
+
 # 🏛️ Architectural Playground: CDC, DDD, CQRS & EDA Showcase
 
-Kompletne repozytorium wzorcowe pokazujące ewolucję i praktyczne zastosowanie architektury napędzanej zdarzeniami (**Event-Driven Architecture**), **CQRS**, **Taktycznego DDD (Domain-Driven Design)** oraz **CDC (Change Data Capture)** przy użyciu nowoczesnego stacku w środowisku PHP 8.4 i Symfony 7.
+A reference implementation showcase demonstrating the evolution and practical application of **Event-Driven Architecture (EDA)**, **CQRS**, **Tactical Domain-Driven Design (DDD)**, and **Change Data Capture (CDC)** using a modern PHP 8.4 and Symfony 7 tech stack.
 
 ---
 
-## 🏛️ Wzorce Architektoniczne i Projektowe
+## 🏛️ Architectural & Design Patterns
 
 ### 🔄 CQRS (Command Query Responsibility Segregation)
-Ścisłe rozdzielenie ścieżki zapisu (**Write Model** w PostgreSQL 16 poprzez Komendy i Agregaty) od ścieżki odczytu (**Read Models** zoptymalizowane pod szybkie zapytania: Meilisearch oraz MongoDB).
+Strict decoupling of the **Write Path** (Write Model in PostgreSQL 16 via Commands and Aggregates) from the **Read Path** (Read Models optimized for fast query retrieval: Meilisearch & MongoDB).
 
-### 🎯 Taktyczne DDD (Domain-Driven Design)
-* **Aggregate Root (Korzeń Agregatu) (`Product`, `Category`):** Pilnuje niezmienników biznesowych i spójności danych.
-* **Value Objects (Obiekty Wartości) (`ProductId`, `ProductSku`, `Price`, `StockQuantity`):** Niemodyfikowalne obiekty z wbudowaną walidacją (np. cena nie może być ujemna).
-* **Domain Events (Zdarzenia Domenowe) (`ProductCreated`, `ProductWasPriced`, `CategoryCreated`):** Odzwierciedlają bezpowrotny fakt biznesowy w domenie.
-* **Domain Repositories (Interfejsy Repozytoriów):** Zdefiniowane w warstwie domeny, zaimplementowane w warstwie infrastruktury.
+### 🎯 Tactical DDD (Domain-Driven Design)
+* **Aggregate Root (`Product`, `Category`):** Enforces business invariants and transactional consistency boundaries.
+* **Value Objects (`ProductId`, `ProductSku`, `Price`, `StockQuantity`):** Immutable value objects with encapsulated self-validation (e.g. price cannot be negative).
+* **Domain Events (`ProductCreated`, `ProductWasPriced`, `CategoryCreated`):** Capture irreversible business facts within the domain.
+* **Domain Repositories:** Abstract interfaces defined in the domain layer and implemented in the infrastructure layer.
 
 ### 📡 CDC (Change Data Capture)
-* Bezpośredni odczyt zmian z dziennika bazy danych (**PostgreSQL WAL - Write-Ahead Log**) za pomocą **Debezium Connect**.
-* Wysyłanie zdarzeń do **Apache Kafka** bez obciążania aplikacji synchronicznym zapisem.
+* Non-invasive, real-time database change capture directly from the **PostgreSQL Write-Ahead Log (WAL)** via **Debezium Connect**.
+* Streams row-level mutation events to **Apache Kafka** without overhead on application write throughput.
 
 ### ⚡ Event-Driven Architecture (EDA) & Eventual Consistency
-* Asynchroniczne zasilanie modeli odczytu poprzez komunikaty w Kafce i **Symfony Messenger**.
-* Modele odczytu osiągają spójność ostateczną (*Eventual Consistency*) po przetworzeniu zdarzeń.
+* Asynchronous feeding of read models via Kafka topics processed by **Symfony Messenger**.
+* Read models achieve **Eventual Consistency** after consuming CDC and domain events.
 
 ---
 
-## 🛡️ Wzorce Obsługi Błędów i Wyjątków
+## 🛡️ Error Handling & Exception Resilience
 
-* **Domain Exception Pattern (Dedykowane Wyjątki Domenowe):** Jawne wyjątki biznesowe (`InvalidPriceException`, `InvalidStockQuantityException`, `ProductNotFoundException`).
-* **Exception Listener / Interceptor:** Centralne przechwytywanie wyjątków na poziomie HTTP i zamiana ich na odpowiedź JSON zgodną ze standardem **RFC 7807 (Problem Details)**.
-* **Fail-Fast:** Wczesna walidacja w obiektach wartości (Value Objects) oraz żądaniach HTTP, zanim dane trafią do bazy lub logiki biznesowej.
-* **Dead Letter Queue (DLQ) & Retry Strategy:** Mechanizm obsługi uszkodzonych komunikatów w kolejce (Symfony Messenger / Kafka), izolujący błędne wiadomości do osobnego transportu `failed`.
+* **Domain Exception Pattern:** Explicit, semantic domain exceptions (`InvalidPriceException`, `InvalidStockQuantityException`, `ProductNotFoundException`).
+* **Exception Listener / Interceptor:** Centralized HTTP-layer exception interceptor transforming domain exceptions into standard JSON responses compliant with **RFC 7807 (Problem Details)**.
+* **Fail-Fast:** Early validation in Value Object constructors and HTTP DTOs before entering business logic or persistence.
+* **Dead Letter Queue (DLQ) & Retry Strategy:** Poisoned message handling in queues (**Symfony Messenger / Kafka**), routing failing messages to a dedicated `failed` transport.
 
 ---
 
-## 💻 Stack Technologiczny
+## 💻 Tech Stack Overview
 
-* **Język & Framework:** PHP 8.4, Symfony 7 (Messenger, Routing, Dependency Injection)
-* **Relacyjna Baza Danych (Write Model):** PostgreSQL 16
-* **Przetwarzanie CDC:** Debezium Connect
-* **Broker Wiadomości:** Apache Kafka
-* **Read Model #1 (Wyszukiwarka FTS):** Meilisearch
+* **Language & Framework:** PHP 8.4, Symfony 7 (Messenger, Routing, Dependency Injection)
+* **Relational Database (Write Model):** PostgreSQL 16
+* **CDC Processing Engine:** Debezium Connect
+* **Message Broker:** Apache Kafka
+* **Read Model #1 (FTS Engine):** Meilisearch
 * **Read Model #2 (NoSQL Document Store):** MongoDB 7.0 + Doctrine MongoDB ODM (`doctrine/mongodb-odm-bundle`)
-* **Środowisko & Konteneryzacja:** Docker & Docker Compose
+* **Containerization:** Docker & Docker Compose
 
 ---
 
-## 📁 Poziomy Projektu (Project Levels)
+## 📁 Project Showcase Levels
 
-1. 📂 **[Poziom 1: Inventory Tracker — CRUD + CDC](file:///Users/lukaszzychal/PhpstormProjects/CDC_DDD_CQRS_EDA/lvl1_Inventory%20Tracker_CRUD%20+%20CDC/README.md)**
-   - Bazowy moduł zarządzania produktami i kategoriami.
-   - Odczyt WAL z PostgreSQL przez Debezium -> Kafka -> Symfony Messenger -> Meilisearch & MongoDB.
-   - Szczegółowa instrukcja uruchomienia: [QUICKSTART.md](file:///Users/lukaszzychal/PhpstormProjects/CDC_DDD_CQRS_EDA/lvl1_Inventory%20Tracker_CRUD%20+%20CDC/QUICKSTART.md).
+1. 📂 **[Level 1: Inventory Tracker — CRUD + CDC](lvl1_Inventory%20Tracker_CRUD%20+%20CDC/README.md)**
+   - Core domain for inventory and category management.
+   - Streaming PostgreSQL WAL via Debezium -> Kafka -> Symfony Messenger -> Meilisearch & MongoDB.
+   - Complete execution and testing guide: [QUICKSTART.md](lvl1_Inventory%20Tracker_CRUD%20+%20CDC/QUICKSTART.md).
 
 ---
 
-## 💡 Refleksja Architektoniczna: CDC vs Zdarzenia Domenowe
+## 💡 Engineering Reflection: CDC vs. Domain Events
 
-W nowoczesnych projektach warto pamiętać o przemyślanym doborze narzędzi do problemu:
+When architecting modern event-driven applications, tool selection requires trade-off evaluation:
 
-* **W projekcie zielonego pola (Greenfield):** Stosowanie CDC tylko do komunikacji wewnątrz nowo tworzonej aplikacji może okazać się **przerostem formy nad treścią (overkill)**. CDC wymaga sporo boilerplate'u (obsługa surowego payloadu zmian bazy). Zdecydowanie czystszym podejściem jest używanie natywnych **Zdarzeń Domenowych (Domain Events)**.
-* **W integracji z Legacy Code:** **CDC to absolutny "game changer"**. Pozwala podpiąć nowoczesne mikroserwisy i architekturę EDA do starych baz danych bez wprowadzania jakichkolwiek zmian w legacy kodzie monolithu!
+* **In Greenfield Projects:** Using CDC purely for internal application read-model sync can be an **overkill**. CDC introduces boilerplate for parsing raw DB mutation payloads (`before`, `after`, `op`). Publishing native **Domain Events** directly from aggregates is cleaner and more expressible.
+* **In Legacy System Integration:** **CDC is an absolute game-changer**. It empowers engineering teams to attach modern EDA microservices to legacy databases with **zero-code intrusion** into legacy monolithic codebases!
