@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+
+# This file is the entry point to configure your own services.
+# Files in the packages/ subdirectory configure your dependencies.
+# See also https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
+
+parameters:
+
+services:
+    _defaults:
+        autowire: true      # Automatically injects dependencies in your services.
+        autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+
+    App\Backend\:
+        resource: '../src/backend/src/'
+        exclude:
+            - '../src/Domain/*/Aggregate/'     
+            - '../src/Domain/*/ValueObject/'   
+            - '../src/Domain/*/Exception/'     
+
+    Meilisearch\Client:
+        arguments:
+            $url: '%env(MEILISEARCH_URL)%'
+            $apiKey: '%env(MEILISEARCH_KEY)%'
+
+    MongoDB\Client:
+        arguments:
+            $uri: '%env(MONGODB_URL)%'
+
+    Doctrine\ODM\MongoDB\DocumentManagerInterface:
+        alias: 'doctrine_mongodb.odm.default_document_manager'
+        public: true
+
+    App\Backend\Infrastructure\Messenger\Serializer\RawDebeziumKafkaSerializer: ~
+
+    App\Backend\Infrastructure\Messenger\Serializer\DebeziumRdKafkaConnectionFactory:
+        arguments:
+            $config: 'kafka://kafka:9092?group.id=inventory-meilisearch-indexer-v6'
+
+    enqueue.transport.default.connection_factory:
+        alias: App\Backend\Infrastructure\Messenger\Serializer\DebeziumRdKafkaConnectionFactory
+        public: true

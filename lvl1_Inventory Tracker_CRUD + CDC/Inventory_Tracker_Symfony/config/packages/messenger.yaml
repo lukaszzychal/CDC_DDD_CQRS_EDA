@@ -1,0 +1,26 @@
+framework:
+    messenger:
+        failure_transport: failed
+
+        default_bus: command.bus
+        buses:
+            command.bus: ~
+            event.bus:
+                default_middleware: allow_no_handlers
+            query.bus: ~
+
+        transports:
+            sync: 'sync://'
+            async: 'doctrine://default?queue_name=async'
+            failed: 'doctrine://default?queue_name=failed'
+            kafka_cdc:
+                dsn: 'enqueue://default?queue[name]=cdc_inventory.public.products'
+                serializer: App\Backend\Infrastructure\Messenger\Serializer\DebeziumSerializer
+                retry_strategy:
+                    max_retries: 0
+
+        routing:
+            'App\Backend\Domain\Event\ProductCreated': sync
+            'App\Backend\Domain\Event\ProductWasPriced': sync
+            'App\Backend\Domain\Event\CategoryCreated': sync
+            'App\Backend\Domain\Event\CategoryNameChanged': sync

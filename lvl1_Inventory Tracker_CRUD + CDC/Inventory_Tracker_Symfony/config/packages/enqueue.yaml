@@ -1,0 +1,9 @@
+enqueue:
+    default:
+        transport:
+            dsn: "kafka:"
+            global:
+                metadata.broker.list: "kafka:9092"
+                group.id: "inventory-meilisearch-indexer-v5"
+            serializer: "@App\\Backend\\Infrastructure\\Messenger\\Serializer\\RawDebeziumKafkaSerializer"
+        client: ~

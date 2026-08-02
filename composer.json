@@ -1,0 +1,5 @@
+{
+    "require": {
+        "symfony/doctrine-messenger": "^8.1"
+    }
+}

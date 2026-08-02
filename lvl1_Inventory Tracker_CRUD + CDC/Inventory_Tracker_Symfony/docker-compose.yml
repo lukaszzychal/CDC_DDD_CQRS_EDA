@@ -1,0 +1,236 @@
+services:
+  # ---------------------------------------------------------------------------
+  # 1. PHP Application (Symfony 8 / PHP 8.4)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: inventory_symfony_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html:delegated
+    environment:
+      APP_ENV: dev
+      APP_SECRET: e4d0f62b78b5e9f82d1a3c7b9e0f1a2b
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/inventory_db?serverVersion=16&charset=utf8"
+      KAFKA_BROKERS: "kafka:9092"
+      MEILISEARCH_URL: "http://meilisearch:7700"
+      MEILISEARCH_KEY: "masterKey"
+      MONGODB_URL: "mongodb://mongodb:27017"
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 2. Web Server (Nginx)
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: inventory_symfony_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html:delegated
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 3. Primary Store: PostgreSQL 16 z włączonym wal_level=logical (CDC)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: inventory_postgres
+    restart: unless-stopped
+    command: postgres -c wal_level=logical -c max_wal_senders=10 -c max_replication_slots=10
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 4. Message Broker: Apache Kafka + Zookeeper
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: inventory_zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - inventory_net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: inventory_kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 5. Change Data Capture (CDC Engine): Debezium Connect
+  # ---------------------------------------------------------------------------
+  debezium:
+    image: debezium/connect:2.6.0.Final
+    container_name: inventory_debezium
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - postgres
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: my_connect_configs
+      OFFSET_STORAGE_TOPIC: my_connect_offsets
+      STATUS_STORAGE_TOPIC: my_connect_statuses
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 5.1 Automated Init: Auto-register Debezium PostgreSQL CDC Connector
+  # ---------------------------------------------------------------------------
+  debezium-init:
+    image: curlimages/curl:latest
+    container_name: inventory_debezium_init
+    restart: "no"
+    depends_on:
+      - debezium
+    volumes:
+      - ./docker/debezium/postgres-connector.json:/config.json:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Debezium REST API..."
+        until curl -s -f http://debezium:8083/connectors > /dev/null; do
+          sleep 2
+        done
+        echo "Registering PostgreSQL CDC connector in Debezium..."
+        curl -s -X POST -H "Accept:application/json" -H "Content-Type:application/json" http://debezium:8083/connectors/ -d @/config.json || true
+        echo "Debezium CDC connector initialized!"
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 6. UI Monitoring: Kafka UI (Dashboard do podglądu zdarzeń Kafka)
+  # ---------------------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: inventory_kafka_ui
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 7. Read Model Store: Meilisearch (NoSQL / Search Engine)
+  # ---------------------------------------------------------------------------
+  meilisearch:
+    image: getmeili/meilisearch:v1.8
+    container_name: inventory_meilisearch
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_MASTER_KEY: masterKey
+      MEILI_ENV: development
+    volumes:
+      - meili_data:/meili_data
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 8. Background Worker: Symfony Messenger Worker (Kafka Consumer)
+  # ---------------------------------------------------------------------------
+  messenger-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: inventory_symfony_worker
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html:delegated
+    command: >
+      sh -c "
+        echo 'Oczekuję na dostępność komendy messenger:consume w Symfony...'
+        until php bin/console list | grep -q 'messenger:consume'; do
+          sleep 5
+        done
+        echo 'Uruchamiam Symfony Messenger Worker...'
+        exec php bin/console messenger:consume async -vv
+      "
+    depends_on:
+      - app
+      - kafka
+      - postgres
+      - meilisearch
+    environment:
+      APP_ENV: dev
+      APP_SECRET: e4d0f62b78b5e9f82d1a3c7b9e0f1a2b
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/inventory_db?serverVersion=16&charset=utf8"
+      KAFKA_BROKERS: "kafka:9092"
+      MEILISEARCH_URL: "http://meilisearch:7700"
+      MEILISEARCH_KEY: "masterKey"
+    networks:
+      - inventory_net
+
+  # ---------------------------------------------------------------------------
+  # 9. Read Model Store: MongoDB (NoSQL Document Store for In-Process Events)
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: inventory_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - inventory_net
+
+networks:
+  inventory_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  meili_data:
+  mongo_data:
+
