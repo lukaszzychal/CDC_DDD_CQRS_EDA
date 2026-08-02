@@ -4,64 +4,51 @@
 
 # 🏛️ Architectural Playground: CDC, DDD, CQRS & EDA Showcase
 
-Kompletne repozytorium wzorcowe pokazujące ewolucję i praktyczne zastosowanie architektury napędzanej zdarzeniami (**Event-Driven Architecture**), **CQRS**, **Taktycznego DDD (Domain-Driven Design)** oraz **CDC (Change Data Capture)** przy użyciu nowoczesnego stacku w środowisku PHP 8.4 i Symfony 7.
+Wielopoziomowe repozytorium wzorcowe pokazujące ewolucję, praktyczne wzorce oraz kompromisy inżynieryjne w architekturze napędzanej zdarzeniami (**Event-Driven Architecture**), **CQRS**, **Taktycznym DDD (Domain-Driven Design)** oraz **CDC (Change Data Capture)** przy użyciu nowoczesnego stacku w środowisku PHP 8.4 i Symfony 7.
 
 ---
 
-## 🏛️ Wzorce Architektoniczne i Projektowe
+## 🗺️ Mapa Projektu i Poziomy (Showcase Roadmap)
+
+Repozytorium jest ustrukturyzowane jako ścieżka edukacyjna podzielona na moduły/poziomy:
+
+| Poziom | Status | Nazwa Modułu | Główny Koncept & Architektura | Link |
+|---|---|---|---|---|
+| **Poziom 1** | 🟢 **Aktywny** | **Inventory Tracker (CRUD + CDC)** | CQRS, Taktyczne DDD, Strumieniowanie WAL PostgreSQL przez Debezium + Kafka do Meilisearch (CDC) oraz MongoDB (Zdarzenia Domenowe). | 📂 **[Zobacz README Modułu](lvl1_Inventory%20Tracker_CRUD%20+%20CDC/README.md)** |
+| **Poziom 2** | 🟡 *Planowany* | **Real-time Notification System** | Powiadomienia w czasie rzeczywistym, WebSockety, Kafka Consumer Groups oraz Idempotentność konsumentów. | 📂 *[lvl2_Real-time Notification System_Event-Driven]* |
+| **Poziom 3** | 🟡 *Planowany* | **Distributed Transaction Manager** | Wzorzec Saga (Orkiestracja vs. Choreografia) do obsługi transakcji rozproszonych i wycofywania zmian. | 📂 *[lvl3_Distributed Transaction_Saga Implementation]* |
+| **Poziom 4** | 🟡 *Planowany* | **Custom CDC Middleware** | Middleware do bezinwazyjnej integracji z systemami legacy, własna transformacja schematów i wzbogacanie zdarzeń. | 📂 *[lvl4_Custom CDC Middleware for Legacy Systems]* |
+
+---
+
+## 🏛️ Ogólne Koncepty Architektoniczne w Repozytorium
 
 ### 🔄 CQRS (Command Query Responsibility Segregation)
-Ścisłe rozdzielenie ścieżki zapisu (**Write Model** w PostgreSQL 16 poprzez Komendy i Agregaty) od ścieżki odczytu (**Read Models** zoptymalizowane pod szybkie zapytania: Meilisearch oraz MongoDB).
+Ścisłe rozdzielenie ścieżki zapisu (**Write Model** w PostgreSQL 16 poprzez Agregaty domenowe) od ścieżek odczytu (**Read Models** zoptymalizowanych pod wyszukiwanie i przechowywanie dokumentów).
 
 ### 🎯 Taktyczne DDD (Domain-Driven Design)
-* **Aggregate Root (Korzeń Agregatu) (`Product`, `Category`):** Pilnuje niezmienników biznesowych i spójności danych.
-* **Value Objects (Obiekty Wartości) (`ProductId`, `ProductSku`, `Price`, `StockQuantity`):** Niemodyfikowalne obiekty z wbudowaną walidacją (np. cena nie może być ujemna).
-* **Domain Events (Zdarzenia Domenowe) (`ProductCreated`, `ProductWasPriced`, `CategoryCreated`):** Odzwierciedlają bezpowrotny fakt biznesowy w domenie.
-* **Domain Repositories (Interfejsy Repozytoriów):** Zdefiniowane w warstwie domeny, zaimplementowane w warstwie infrastruktury.
+Bogate modelowanie domeny przy użyciu **Korzeni Agregatów**, **Niemodyfikowalnych Obiektów Wartości**, **Zdarzeń Domenowych** oraz abstrakcyjnych **Repozytoriów Domenowych**.
 
 ### 📡 CDC (Change Data Capture)
-* Bezpośredni odczyt zmian z dziennika bazy danych (**PostgreSQL WAL - Write-Ahead Log**) za pomocą **Debezium Connect**.
-* Wysyłanie zdarzeń do **Apache Kafka** bez obciążania aplikacji synchronicznym zapisem.
+Bezinwazyjne przechwytywanie zmian w bazie danych za pomocą **Debezium Connect** czytającego **PostgreSQL Write-Ahead Log (WAL)** i strumieniującego zdarzenia do **Apache Kafka**.
 
 ### ⚡ Event-Driven Architecture (EDA) & Eventual Consistency
-* Asynchroniczne zasilanie modeli odczytu poprzez komunikaty w Kafce i **Symfony Messenger**.
-* Modele odczytu osiągają spójność ostateczną (*Eventual Consistency*) po przetworzeniu zdarzeń.
+Asynchroniczne przetwarzanie komunikatów przez **Symfony Messenger** i **Kafkę**, pozwalające osiągnąć spójność ostateczną (*Eventual Consistency*) w odseparowanych mikroserwisach i bazach odczytu.
 
 ---
 
-## 🛡️ Wzorce Obsługi Błędów i Wyjątków
+## 💡 Refleksje Architektoniczne: CDC vs. Zdarzenia Domenowe
 
-* **Domain Exception Pattern (Dedykowane Wyjątki Domenowe):** Jawne wyjątki biznesowe (`InvalidPriceException`, `InvalidStockQuantityException`, `ProductNotFoundException`).
-* **Exception Listener / Interceptor:** Centralne przechwytywanie wyjątków na poziomie HTTP i zamiana ich na odpowiedź JSON zgodną ze standardem **RFC 7807 (Problem Details)**.
-* **Fail-Fast:** Wczesna walidacja w obiektach wartości (Value Objects) oraz żądaniach HTTP, zanim dane trafią do bazy lub logiki biznesowej.
-* **Dead Letter Queue (DLQ) & Retry Strategy:** Mechanizm obsługi uszkodzonych komunikatów w kolejce (Symfony Messenger / Kafka), izolujący błędne wiadomości do osobnego transportu `failed`.
+* **W projektach zielonego pola (Greenfield):** Stosowanie CDC tylko do komunikacji wewnątrz nowo tworzonej aplikacji bywa **przerostem formy nad treścią (overkill)**. CDC wymaga sporo boilerplate'u (obsługa surowych zmian bazy `before`/`after`). Zdecydowanie czystszym podejściem jest używanie natywnych **Zdarzeń Domenowych (Domain Events)** bezpośrednio z kodu.
+* **W integracji z Legacy Code:** **CDC to absolutny "game changer"**. Pozwala podpiąć nowoczesne mikroserwisy i architekturę EDA do starych baz danych bez wprowadzania jakichkolwiek zmian w legacy kodzie monolithu!
 
 ---
 
 ## 💻 Stack Technologiczny
 
 * **Język & Framework:** PHP 8.4, Symfony 7 (Messenger, Routing, Dependency Injection)
-* **Relacyjna Baza Danych (Write Model):** PostgreSQL 16
-* **Przetwarzanie CDC:** Debezium Connect
-* **Broker Wiadomości:** Apache Kafka
-* **Read Model #1 (Wyszukiwarka FTS):** Meilisearch
-* **Read Model #2 (NoSQL Document Store):** MongoDB 7.0 + Doctrine MongoDB ODM (`doctrine/mongodb-odm-bundle`)
-* **Środowisko & Konteneryzacja:** Docker & Docker Compose
-
----
-
-## 📁 Poziomy Projektu (Project Levels)
-
-1. 📂 **[Poziom 1: Inventory Tracker — CRUD + CDC](file:///Users/lukaszzychal/PhpstormProjects/CDC_DDD_CQRS_EDA/lvl1_Inventory%20Tracker_CRUD%20+%20CDC/README.md)**
-   - Bazowy moduł zarządzania produktami i kategoriami.
-   - Odczyt WAL z PostgreSQL przez Debezium -> Kafka -> Symfony Messenger -> Meilisearch & MongoDB.
-   - Szczegółowa instrukcja uruchomienia: [QUICKSTART.md](file:///Users/lukaszzychal/PhpstormProjects/CDC_DDD_CQRS_EDA/lvl1_Inventory%20Tracker_CRUD%20+%20CDC/QUICKSTART.md).
-
----
-
-## 💡 Refleksja Architektoniczna: CDC vs Zdarzenia Domenowe
-
-W nowoczesnych projektach warto pamiętać o przemyślanym doborze narzędzi do problemu:
-
-* **W projekcie zielonego pola (Greenfield):** Stosowanie CDC tylko do komunikacji wewnątrz nowo tworzonej aplikacji może okazać się **przerostem formy nad treścią (overkill)**. CDC wymaga sporo boilerplate'u (obsługa surowego payloadu zmian bazy). Zdecydowanie czystszym podejściem jest używanie natywnych **Zdarzeń Domenowych (Domain Events)**.
-* **W integracji z Legacy Code:** **CDC to absolutny "game changer"**. Pozwala podpiąć nowoczesne mikroserwisy i architekturę EDA do starych baz danych bez wprowadzania jakichkolwiek zmian w legacy kodzie monolithu!
+* **Relational Database (Write Model):** PostgreSQL 16
+* **CDC Engine:** Debezium Connect
+* **Message Broker:** Apache Kafka
+* **Read Models:** Meilisearch (Full-Text Search) oraz MongoDB 7.0 (NoSQL Document Store + Doctrine ODM)
+* **Konteneryzacja:** Docker & Docker Compose
