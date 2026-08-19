@@ -1,47 +1,51 @@
-# 🚀 Quick Start & Manual Testing Guide (Instrukcja Szybkiego Uruchomienia i Testowania)
-
-Niniejsza instrukcja przeprowadzi Cię krok po kroku przez uruchomienie całego środowiska architektonicznego (Symfony, PostgreSQL, Debezium CDC, Kafka, Meilisearch) oraz wykonanie ręcznych testów API i weryfikacji strumieniowania danych CDC.
+🌐 **Language / Język:** 🇬🇧 **English** | 🇵🇱 [Polski](QUICKSTART.pl.md)
 
 ---
 
-## 📋 Wymagania Wstępne (Prerequisites)
+# 🚀 Quick Start & Manual Testing Guide
 
-* **Docker Desktop** (lub Docker Engine + Docker Compose)
-* Narzędzie HTTP do wysyłania zapytań: **cURL**, **Postman** lub **Insomnia**
-* (Opcjonalnie) `jq` w terminalu do formatowania odpowiedzi JSON
+This guide will walk you step-by-step through setting up the complete architectural environment (Symfony, PostgreSQL, Debezium CDC, Kafka, Meilisearch), running manual API tests, and verifying CDC data streaming.
 
 ---
 
-## ⚙️ 1. Uruchomienie Środowiska (Docker Compose)
+## 📋 Prerequisites
 
-Przejdź do katalogu projektu Symfony i uruchom wszystkie kontenery infrastruktury:
+* **Docker Desktop** (or Docker Engine + Docker Compose)
+* HTTP client tool for sending requests: **cURL**, **Postman**, or **Insomnia**
+* (Optional) `jq` installed in terminal for JSON formatting
+
+---
+
+## ⚙️ 1. Environment Setup (Docker Compose)
+
+Navigate to the Symfony project directory and start all infrastructure containers:
 
 ```bash
 cd "lvl1_Inventory Tracker_CRUD + CDC/Inventory_Tracker_Symfony"
 
-# Uruchomienie wszystkich kontenerów w tle
+# Start all containers in background
 docker compose up -d --build
 ```
 
-### Sprawdzenie statusu działających kontenerów:
+### Check running containers status:
 ```bash
 docker compose ps
 ```
 
-Upewnij się, że następujące usługi mają status `Up` / `running`:
+Ensure the following services have `Up` / `running` status:
 * `inventory_symfony_app` (PHP 8.4 FPM + `rdkafka`)
-* `inventory_symfony_web` (Nginx na porcie `8080`)
-* `inventory_postgres` (PostgreSQL na porcie `5433` z `wal_level=logical`)
-* `inventory_kafka` (Kafka na porcie `9092` / Kafka UI na `8081`)
-* `inventory_debezium` (Debezium REST API na porcie `8083`)
-* `inventory_meilisearch` (Meilisearch na porcie `7700`)
+* `inventory_symfony_web` (Nginx on port `8080`)
+* `inventory_postgres` (PostgreSQL on port `5433` with `wal_level=logical`)
+* `inventory_kafka` (Kafka on port `9092` / Kafka UI on `8081`)
+* `inventory_debezium` (Debezium REST API on port `8083`)
+* `inventory_meilisearch` (Meilisearch on port `7700`)
 * `inventory_symfony_worker` (Symfony Messenger Worker)
 
 ---
 
-## 🗄️ 2. Przygotowanie Bazy Danych (Migracje / Schemat)
+## 🗄️ 2. Database Preparation (Migrations / Schema)
 
-Wykonaj aktualizację struktury bazy danych PostgreSQL wewnątrz kontenera aplikacji:
+Execute database structure update in PostgreSQL inside the application container:
 
 ```bash
 docker compose exec app php bin/console doctrine:schema:update --force
@@ -49,34 +53,34 @@ docker compose exec app php bin/console doctrine:schema:update --force
 
 ---
 
-## 🔌 3. Weryfikacja Statusu Konektora CDC (Debezium)
+## 🔌 3. CDC Connector Verification (Debezium)
 
-Kontener `debezium-init` automatycznie rejestruje konektor PostgreSQL przy starcie. Aby upewnić się, że CDC działa poprawnie, sprawdź status konektora:
+The `debezium-init` container automatically registers the PostgreSQL connector on startup. To verify that CDC is running properly, check the connector status:
 
 ```bash
 curl -s http://localhost:8083/connectors/inventory-postgres-connector/status | jq .
 ```
 
-**Oczekiwany wynik:**
-`"state": "RUNNING"` dla konektora i jego zadań (`tasks`).
+**Expected result:**
+`"state": "RUNNING"` for both connector and its tasks (`tasks`).
 
 ---
 
-## 📡 4. Jak przetestować czy baza loguje WAL i dane wpadają do Kafki?
+## 📡 4. How to Test PostgreSQL WAL Logging & Kafka Ingestion?
 
-Przed wykonaniem zapytań HTTP warto przygotować podgląd strumieniowania danych z logów PostgreSQL WAL do Kafki. Dostępne są 3 metody weryfikacji:
+Before sending HTTP requests, it is recommended to monitor data streaming from PostgreSQL WAL logs into Kafka. There are 3 verification methods available:
 
-### 🏆 Metoda 1: Graficzny interfejs Kafka UI (**REKOMENDOWANA**)
+### 🏆 Method 1: Kafka UI Graphical Interface (**RECOMMENDED**)
 
-1. Otwórz w przeglądarce interfejs Kafka UI: [http://localhost:8081](http://localhost:8081)
-2. Przejdź do sekcji **Topics** w lewym menu.
-3. Wybierz temat: `cdc_inventory.public.products` (lub `cdc_inventory.public.categories`).
-4. Przejdź do zakładki **Messages**.
-5. Zobaczysz wpadające w czasie rzeczywistym zdarzenia z ładunkiem JSON zawierającym obiekt `after` ze zmianami z PostgreSQL WAL!
+1. Open Kafka UI in your browser: [http://localhost:8081](http://localhost:8081)
+2. Navigate to the **Topics** section in the left menu.
+3. Select topic: `cdc_inventory.public.products` (or `cdc_inventory.public.categories`).
+4. Switch to the **Messages** tab.
+5. You will see real-time streaming events with a JSON payload containing the `after` object with changes captured from PostgreSQL WAL!
 
-### 📺 Metoda 2: Podgląd wiadomości Kafki w terminalu (`kafka-console-consumer`)
+### 📺 Method 2: Terminal Kafka Message Stream (`kafka-console-consumer`)
 
-Uruchom konsumenta Kafki w terminalu przed wywołaniem cURL-i:
+Run the Kafka consumer in your terminal before executing cURL commands:
 
 ```bash
 docker compose exec kafka kafka-console-consumer \
@@ -85,11 +89,11 @@ docker compose exec kafka kafka-console-consumer \
   --from-beginning
 ```
 
-Po wysłaniu dowolnego żądania POST/PATCH w drugim oknie konsoli zobaczysz wygenerowane przez Debezium zdarzenie CDC w formacie JSON (`op: "c"` lub `op: "u"`).
+After sending any POST/PATCH request, you will see Debezium-generated CDC events in JSON format (`op: "c"` or `op: "u"`) in the console window.
 
-### 🔌 Metoda 3: Odpytanie REST API Debezium Connect
+### 🔌 Method 3: Query Debezium Connect REST API
 
-Sprawdź stan konektora oraz liczbę przetworzonych zadań:
+Check connector status and processed task count:
 
 ```bash
 curl -s http://localhost:8083/connectors/inventory-postgres-connector/status | jq .
@@ -97,11 +101,11 @@ curl -s http://localhost:8083/connectors/inventory-postgres-connector/status | j
 
 ---
 
-## 🧪 5. Przetestowanie Scenariuszy Użycia (Manual HTTP Testing)
+## 🧪 5. Testing Use Case Scenarios (Manual HTTP Testing)
 
-### 🔹 Scenariusz A: Utworzenie nowej kategorii (`POST /api/category`)
+### 🔹 Scenario A: Create New Category (`POST /api/category`)
 
-Wyślij żądanie utworzenia kategorii (np. "Elektronika"):
+Send a request to create a category (e.g., "Electronics"):
 
 ```bash
 curl -i -X POST http://localhost:8080/api/category \
@@ -111,7 +115,7 @@ curl -i -X POST http://localhost:8080/api/category \
   }'
 ```
 
-**Oczekiwany wynik (HTTP 201 Created):**
+**Expected result (HTTP 201 Created):**
 ```json
 {
   "status": "success",
@@ -124,9 +128,9 @@ curl -i -X POST http://localhost:8080/api/category \
 
 ---
 
-### 🔹 Scenariusz B: Utworzenie nowego produktu z przypisaną kategorią (`POST /api/product`)
+### 🔹 Scenario B: Create New Product with Category (`POST /api/product`)
 
-Wyślij żądanie utworzenia nowego produktu, podając ID utworzonej kategorii:
+Send a request to create a product using the created Category ID:
 
 ```bash
 curl -i -X POST http://localhost:8080/api/product \
@@ -141,7 +145,7 @@ curl -i -X POST http://localhost:8080/api/product \
   }'
 ```
 
-**Oczekiwany wynik (HTTP 201 Created):**
+**Expected result (HTTP 201 Created):**
 ```json
 {
   "status": "success",
@@ -154,11 +158,11 @@ curl -i -X POST http://localhost:8080/api/product \
 
 ---
 
-### 🔹 Scenariusz C: Zmiana ceny produktu (`PATCH /api/product/{productId}/price`)
+### 🔹 Scenario C: Update Product Price (`PATCH /api/product/{productId}/price`)
 
-> 💡 **Uwaga:** Zastąp `019fc304-df32-71bc-9101-c569ed23bc9c` rzeczywistym identyfikatorem `productId` zwróconym w odpowiedzi w Scenariuszu B!
+> 💡 **Note:** Replace `019fc304-df32-71bc-9101-c569ed23bc9c` with the actual `productId` returned from Scenario B response!
 
-Zmień cenę utworzonego produktu:
+Update the price of the created product:
 
 ```bash
 curl -i -X PATCH http://localhost:8080/api/product/019fc304-df32-71bc-9101-c569ed23bc9c/price \
@@ -169,7 +173,7 @@ curl -i -X PATCH http://localhost:8080/api/product/019fc304-df32-71bc-9101-c569e
   }'
 ```
 
-**Oczekiwany wynik (HTTP 200 OK):**
+**Expected result (HTTP 200 OK):**
 ```json
 {
   "status": "success",
@@ -182,16 +186,16 @@ curl -i -X PATCH http://localhost:8080/api/product/019fc304-df32-71bc-9101-c569e
 
 ---
 
-### 🔹 Scenariusz E: Wyszukiwanie w Modelu Odczytu Meilisearch (`GET /api/products/search/meilisearch`)
+### 🔹 Scenario E: Search in Meilisearch Read Model (`GET /api/products/search/meilisearch`)
 
-Wykonaj odczyt z modelu wyszukiwarki **Meilisearch** zasilanego przez **Change Data Capture (Debezium + Kafka)**:
+Perform a read from the **Meilisearch** search engine read model populated via **Change Data Capture (Debezium + Kafka)**:
 
 ```bash
-# Wywołanie z sformatowanym ładunkiem JSON (przy użyciu python3):
+# Execute with formatted JSON payload (using python3):
 curl -s -X GET "http://localhost:8080/api/products/search/meilisearch?q=Klawiatura" | python3 -m json.tool
 ```
 
-**Oczekiwany wynik (HTTP 200 OK):**
+**Expected result (HTTP 200 OK):**
 ```json
 {
   "status": "success",
@@ -214,16 +218,16 @@ curl -s -X GET "http://localhost:8080/api/products/search/meilisearch?q=Klawiatu
 
 ---
 
-### 🔹 Scenariusz F: Wyszukiwanie w Modelu Odczytu MongoDB (`GET /api/products/search/mongodb`)
+### 🔹 Scenario F: Search in MongoDB Read Model (`GET /api/products/search/mongodb`)
 
-Wykonaj odczyt z zdenormalizowanego dokumentowego modelu odczytu **MongoDB** zasilanego w procesie przez **Zdarzenia Domenowe (Domain Events)**:
+Perform a read from the denormalized **MongoDB** document read model populated in-process via **Domain Events**:
 
 ```bash
-# Wywołanie z sformatowanym ładunkiem JSON (przy użyciu python3):
+# Execute with formatted JSON payload (using python3):
 curl -s -X GET "http://localhost:8080/api/products/search/mongodb?q=Wiedźmin" | python3 -m json.tool
 ```
 
-**Oczekiwany wynik (HTTP 200 OK):**
+**Expected result (HTTP 200 OK):**
 ```json
 {
   "status": "success",
@@ -247,9 +251,9 @@ curl -s -X GET "http://localhost:8080/api/products/search/mongodb?q=Wiedźmin" |
 
 ---
 
-## ⚡ 6. Uwaga dotycząca przetwarzania Zdarzeń (Sync vs Async w Messengerze)
+## ⚡ 6. Note on Event Processing (Sync vs. Async in Symfony Messenger)
 
-Domyślnie w pliku `config/packages/messenger.yaml` zdarzenia domenowe skierowane są do transportu synchronicznego (`sync`):
+By default in `config/packages/messenger.yaml`, domain events are routed to synchronous transport (`sync`):
 
 ```yaml
 routing:
@@ -259,32 +263,32 @@ routing:
     'App\Backend\Domain\Event\CategoryNameChanged': sync
 ```
 
-**Dlaczego?** Pozwala to na natychmiastowe wykonanie handlerów i weryfikację wyników podczas testów ręcznych bez konieczności oczekiwania na kolejkę.
+**Why?** This enables instant handler execution and immediate result verification during manual tests without waiting for queues.
 
-**Testowanie asynchroniczne (`async`):**
-Jeśli chcesz przetestować asynchroniczną obsługę zdarzeń w tle przez worker (`inventory_symfony_worker`), po prostu zamień w `messenger.yaml` wartość `sync` na `async` i przeładuj pamięć podręczną (`cache:clear`). Zdarzenia będą wówczas trafiać do kolejki bazy/Kafki i być konsumowane przez workera w tle.
+**Asynchronous testing (`async`):**
+If you want to test asynchronous background event handling via worker (`inventory_symfony_worker`), simply replace `sync` with `async` in `messenger.yaml` and clear cache (`cache:clear`). Events will then be sent to the DB/Kafka queue and consumed by the background worker.
 
 ---
 
-## 🛠️ Przydatne Polecenia Deweloperskie
+## 🛠️ Useful Developer Commands
 
-* **Uruchomienie konsumenta Kafki (Symfony Messenger CDC Worker):**
+* **Run Kafka Consumer (Symfony Messenger CDC Worker):**
   ```bash
   docker compose exec app php bin/console messenger:consume kafka_cdc -vv
   ```
 
-* **Podgląd logów dowolnego kontenera:**
+* **View logs for any container:**
   ```bash
   docker compose logs -f app
   docker compose logs -f debezium
   ```
 
-* **Wyczyszczenie pamięci podręcznej Symfony:**
+* **Clear Symfony cache:**
   ```bash
   docker compose exec app php bin/console cache:clear
   ```
 
-* **Zatrzymanie całego środowiska:**
+* **Stop complete environment:**
   ```bash
   docker compose down
   ```

@@ -83,4 +83,4 @@ Mechanizm obsługi uszkodzonych lub niezrealizowanych komunikatów w kolejce (**
 
 Szczegółową instrukcję krok po kroku dotyczącą uruchamiania kontenerów Docker, weryfikacji konektorów Debezium oraz gotowych poleceń `curl` / HTTP znajdziesz w pliku:
 
-👉 **[QUICKSTART.md](QUICKSTART.md)**
+👉 **[QUICKSTART.pl.md](QUICKSTART.pl.md)**
